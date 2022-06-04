@@ -1,0 +1,11 @@
+.idea
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.egg*
+*.log
+.venv
+venv
+*.mo
+build/
+local_env.py
