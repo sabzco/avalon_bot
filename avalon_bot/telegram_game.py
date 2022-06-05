@@ -45,14 +45,16 @@ class TgParticipant(Participant):
     def __str__(self):
         return self.full_name
 
-    @property
-    def mention(self):
-        return f'<a href="tg://user?id={self.identity}">{html.escape(self.full_name)}</a>'
+
+def mention(p: Participant):
+    if isinstance(p, TgParticipant):
+        return f'<a href="tg://user?id={p.identity}">{html.escape(p.full_name)}</a>'
+    return str(p)
 
 
-class TgGame(Game[TgParticipant]):
-    def __init__(self, game_id: str):
-        super().__init__(game_id)
+class TgGame(Game):
+    def __init__(self, game_id: str, participants=None):
+        super().__init__(game_id, participants)
         self.active_message_id = None
         self.game_start_message_id = None
         self.pending_next_lady: Optional[TgParticipant] = None
@@ -105,7 +107,7 @@ class TgGame(Game[TgParticipant]):
     def send_joining_message(self):
         msg = '<i>Press <b>Play</b> after all participants have joined …</i>\n'
         for i, p in enumerate(self.participants):
-            msg += f'\n‎{i + 1}. {p.mention}'
+            msg += f'\n‎{i + 1}. {mention(p)}'
         return dict(
             text=msg,
             parse_mode=ParseMode.HTML,
@@ -120,7 +122,7 @@ class TgGame(Game[TgParticipant]):
         msg = ["<i><b>The game is started!</b></i>\n"]
         for i, p in enumerate(self.participants):
             emoji = KING_EMOJI if self.king == p else (LADY_EMOJI if self.lady == p else "")
-            msg.append(f'‎{i + 1}. {p.mention} {emoji}')
+            msg.append(f'‎{i + 1}. {mention(p)} {emoji}')
         msg.append("\n<i>Roles (<b>not</b> necessarily in the order of the participants):</i>")
         for r in self.plan.roles:
             msg.append(f'{"▪️" if r.is_evil else "▫️"} {r.emoji} {r.value}')
@@ -140,11 +142,11 @@ class TgGame(Game[TgParticipant]):
         )
 
     def get_team_building_message(self):
-        msg = f"<b>‎{KING_EMOJI} {self.king.mention}!</b>\n<i>" + \
+        msg = f"<b>‎{KING_EMOJI} {mention(self.king)}!</b>\n<i>" + \
               f"Choose {self.step[1]} people for this quest!</i>\n"
         for i, p in enumerate(self.current_team):
-            msg += f'\n‎{i + 1}. {p.mention}'
-        buttons = [InlineKeyboardButton(p.full_name, callback_data=MSG_SELECT + p.identity) for p in self.participants]
+            msg += f'\n‎{i + 1}. {mention(p)}'
+        buttons = [InlineKeyboardButton(str(p), callback_data=MSG_SELECT + p.identity) for p in self.participants]
         return dict(
             text=msg,
             parse_mode=ParseMode.HTML,
@@ -157,10 +159,10 @@ class TgGame(Game[TgParticipant]):
         if self.failed_voting_count:
             msg += f'{self.failed_voting_count} rejection in this round (out of {len(self.participants)})\n'
         for p in self.current_team:
-            msg += f'\n‎🏅 {p.mention}'
+            msg += f'\n‎🏅 {mention(p)}'
         msg += "\n</b>"
         for p in self.participants:
-            msg += f'\n‎{"❔" if p.vote is None else "🗳"} {p.mention}'
+            msg += f'\n‎{"❔" if p.vote is None else "🗳"} {mention(p)}'
         return dict(
             text=msg,
             parse_mode=ParseMode.HTML,
@@ -173,13 +175,13 @@ class TgGame(Game[TgParticipant]):
     def get_voting_result_message(self, results):
         msg = f'<b>Selected team is {"APPROVED! ✅" if results else "REJECTED! ❌"}</b>\n'
         for p in self.participants:
-            msg += f'\n‎{"⚪" if p.vote else "⚫"} {p.mention}'
+            msg += f'\n‎{"⚪" if p.vote else "⚫"} {mention(p)}'
         return dict(text=msg, parse_mode=ParseMode.HTML)
 
     def get_quest_message(self):
         msg = f"<i><b>Choose the battle result:</b>\n(fail votes to fail quest: {self.step[0]})</i>\n"
         for p in self.current_team:
-            msg += f'\n‎{"❔" if p.quest_action is None else "🔱"} {p.mention}'
+            msg += f'\n‎{"❔" if p.quest_action is None else "🔱"} {mention(p)}'
         return dict(
             text=msg,
             parse_mode=ParseMode.HTML,
@@ -196,11 +198,11 @@ class TgGame(Game[TgParticipant]):
         return dict(text=msg, parse_mode=ParseMode.HTML)
 
     def get_lady_message(self):
-        msg = f"<b>‎{LADY_EMOJI} {self.lady.mention}!</b>\n<i>" + \
+        msg = f"<b>‎{LADY_EMOJI} {mention(self.lady)}!</b>\n<i>" + \
               f"Choose the next lady!\nYou will know his/her team.</i>\n\n" \
-              f"New Lady 👉 ‎{self.pending_next_lady.mention if self.pending_next_lady else '???'}"
+              f"New Lady 👉 ‎{mention(self.pending_next_lady) if self.pending_next_lady else '???'}"
 
-        buttons = [InlineKeyboardButton(p.full_name, callback_data=MSG_NEXT_LADY + p.identity) for p in
+        buttons = [InlineKeyboardButton(str(p), callback_data=MSG_NEXT_LADY + p.identity) for p in
                    self.next_lady_candidates()]
         return dict(
             text=msg,
@@ -215,10 +217,10 @@ class TgGame(Game[TgParticipant]):
             if p.role.is_evil:
                 msg += f'{"▪️" if p.role.is_evil else "▫️"} {p.role.value} {p.role.emoji} {p}\n'
 
-        msg += f'\n<b>{self.get_assassin().mention}</b>'
+        msg += f'\n<b>{mention(self.get_assassin())}</b>'
         msg += f'\n<i>Try to guess <b>Merlin</b> {ROLE_EMOJI[Role.Merlin]}!</i>\n'
         msg += f'\nMerlin 👉 ‎{self.pending_merlin or "???"}'
-        buttons = [InlineKeyboardButton(p.full_name, callback_data=MSG_GUESS_MERLIN + p.identity)
+        buttons = [InlineKeyboardButton(str(p), callback_data=MSG_GUESS_MERLIN + p.identity)
                    for p in self.participants if not p.role.is_evil]
         return dict(
             text=msg,

@@ -88,9 +88,9 @@ def game_query_callback(f=None, create_new_participant=False, check_for_active_m
             else:
                 # noinspection PyBroadException
                 try:
-                    participant = TgParticipant(update.effective_user) \
+                    actor = TgParticipant(update.effective_user) \
                         if create_new_participant else game.get_participant_by_id(str(update.effective_user.id))
-                    answer = f(game, participant, update, context)
+                    answer = f(game, actor, update, context)
                     if asyncio.iscoroutine(answer):
                         answer = await answer
                     await game.save()
@@ -108,15 +108,15 @@ def game_query_callback(f=None, create_new_participant=False, check_for_active_m
 
 
 @game_query_callback(create_new_participant=True)
-def join(game: TgGame, participant: TgParticipant, update: Update, _context: CallbackContext.DEFAULT_TYPE):
-    game.add_participant(participant)
+def join(game: TgGame, actor: TgParticipant, update: Update, _context: CallbackContext.DEFAULT_TYPE):
+    game.add_participant(actor)
     later_edit(update, **game.send_joining_message())
     return 'Joined successfully'
 
 
 @game_query_callback(create_new_participant=True)
-def leave(game: TgGame, participant: TgParticipant, update: Update, _context: CallbackContext.DEFAULT_TYPE):
-    game.remove_participant(participant)
+def leave(game: TgGame, actor: TgParticipant, update: Update, _context: CallbackContext.DEFAULT_TYPE):
+    game.remove_participant(actor)
     later_edit(update, **game.send_joining_message())
     return 'Left successfully'
 
@@ -128,8 +128,8 @@ async def play(game: TgGame, _participant, update: Update, _context):
 
 
 @game_query_callback(check_for_active_message=False)
-def my_info(game: TgGame, participant, *_):
-    return dict(text=game.get_user_info(participant), show_alert=True)
+def my_info(game: TgGame, actor, *_):
+    return dict(text=game.get_user_info(actor), show_alert=True)
 
 
 @game_query_callback
@@ -139,21 +139,21 @@ async def proceed(game: TgGame, _participant, update: Update, _context):
 
 
 @game_query_callback
-def select(game: TgGame, participant: TgParticipant, update: Update, _context):
+def select(game: TgGame, actor: TgParticipant, update: Update, _context):
     identity = update.callback_query.data.replace(MSG_SELECT, '')
-    game.select_for_team(participant, identity)
+    game.select_for_team(actor, identity)
     later_edit(update, **game.get_team_building_message())
 
 
 @game_query_callback
-async def confirm_team(game: TgGame, participant: TgParticipant, update: Update, _context):
-    game.confirm_team(participant)
+async def confirm_team(game: TgGame, actor: TgParticipant, update: Update, _context):
+    game.confirm_team(actor)
     await game.send_msg(update, game.get_current_phase_message())
 
 
 @game_query_callback
-async def vote(game: TgGame, participant: TgParticipant, update: Update, _context):
-    game.vote(participant, update.callback_query.data == MSG_APPROVE)
+async def vote(game: TgGame, actor: TgParticipant, update: Update, _context):
+    game.vote(actor, update.callback_query.data == MSG_APPROVE)
     later_edit(update, **game.get_voting_phase_message())
     results = game.process_vote_results()
     if results is not None:
@@ -162,59 +162,59 @@ async def vote(game: TgGame, participant: TgParticipant, update: Update, _contex
             await update.callback_query.message.reply_text(f'{FAIL_EMOJI} Too many rejections, quest failed',
                                                            quote=False)
         await game.send_msg(update, game.get_current_phase_message())
-    return 'Current vote: ' + participant.current_vote_text
+    return 'Current vote: ' + actor.current_vote_text
 
 
 @game_query_callback
-async def quest_action(game: TgGame, participant: TgParticipant, update: Update, _context):
-    game.quest_action(participant, update.callback_query.data == MSG_SUCCESS)
+async def quest_action(game: TgGame, actor: TgParticipant, update: Update, _context):
+    game.quest_action(actor, update.callback_query.data == MSG_SUCCESS)
     later_edit(update, **game.get_quest_message())
     results = game.process_quest_result()
     if results is not None:
         await update.callback_query.message.reply_text(**game.get_quest_result_message(*results), quote=False)
         await game.send_msg(update, game.get_current_phase_message())
-    return 'Current action: ' + participant.current_vote_text
+    return 'Current action: ' + actor.current_vote_text
 
 
 @game_query_callback
-async def select_next_lady(game: TgGame, participant: TgParticipant, update: Update, _context):
+async def select_next_lady(game: TgGame, actor: TgParticipant, update: Update, _context):
     identity = update.callback_query.data.replace(MSG_NEXT_LADY, '')
-    next_lady = game.set_next_lady(participant, identity, dry_run=True)
+    next_lady = game.set_next_lady(actor, identity, dry_run=True)
     await send_ignore_400(update.callback_query.message.edit_text(**game.get_lady_message()))
     return 'Next lady will be: ' + str(next_lady)
 
 
 @game_query_callback(check_for_active_message=False)
-async def get_lady_truth(game: TgGame, participant: TgParticipant, update: Update, _context):
+async def get_lady_truth(game: TgGame, actor: TgParticipant, update: Update, _context):
     if update.callback_query.message.message_id != game.active_message_id:
         # Button pressed on an old message
         result = game.lady_responses.get(update.callback_query.message.message_id)
         if not result:
             return 'Button pressed on an old message'
-        if result['identity'] != participant.identity:
+        if result['identity'] != actor.identity:
             raise OnlyLadyCanDo
         return dict(text=f'He/She is {"" if result["is_evil"] else "NOT "}an EVIL!', show_alert=True)
 
     # current phase should be Lady, proceed the game
     if not game.pending_next_lady:
         raise InvalidActionException('No one is selected')
-    next_lady = game.set_next_lady(participant, game.pending_next_lady.identity, message=update.callback_query.message)
+    next_lady = game.set_next_lady(actor, game.pending_next_lady.identity, message=update.callback_query.message)
     await game.send_msg(update, game.get_current_phase_message())
     return dict(text=f'He/She is {"" if next_lady.role.is_evil else "NOT "}an EVIL!', show_alert=True)
 
 
 @game_query_callback
-async def guess_merlin(game: TgGame, participant: TgParticipant, update: Update, _context):
+async def guess_merlin(game: TgGame, actor: TgParticipant, update: Update, _context):
     identity = update.callback_query.data.replace(MSG_GUESS_MERLIN, '')
-    game.guess_merlin(participant, identity, dry_run=True)
+    game.guess_merlin(actor, identity, dry_run=True)
     await send_ignore_400(update.callback_query.message.edit_text(**game.get_guess_merlin_message()))
 
 
 @game_query_callback
-async def confirm_merlin(game: TgGame, participant: TgParticipant, update: Update, _context):
+async def confirm_merlin(game: TgGame, actor: TgParticipant, update: Update, _context):
     if not game.pending_merlin:
         raise InvalidActionException('Merlin not selected')
-    game.guess_merlin(participant, game.pending_merlin.identity)
+    game.guess_merlin(actor, game.pending_merlin.identity)
     await game.send_msg(update, game.get_current_phase_message())
 
 

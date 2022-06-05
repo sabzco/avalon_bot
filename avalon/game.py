@@ -3,12 +3,11 @@ import pickle
 import re
 from datetime import datetime
 from random import sample
-from typing import Generic, TypeVar, Optional
+from typing import Optional
 
 import aioredis
 
 from avalon import config, exceptions
-from avalon.config import REDIS_PREFIX_GAME
 from avalon.exceptions import InvalidActionException, OnlyKingCanDo, OnlyLadyCanDo, InvalidParticipant, \
     OnlyAssassinCanDo
 
@@ -49,9 +48,6 @@ class Participant:
 
     def __str__(self):
         return self.identity
-
-
-T = TypeVar('T', bound=Participant)
 
 
 class GamePhase(enum.Enum):
@@ -124,22 +120,22 @@ if config.GAME_DEBUG:
     GAME_PLANS[2]: GamePlan('1/1 1/1 1/1 1/1 1/1', 'Merlin,Assassin')
 
 
-class Game(Generic[T]):
-    def __init__(self, game_id: str):
+class Game:
+    def __init__(self, game_id: str, participants: Optional[list[Participant]] = None):
         verify_identity(game_id)
         self.created = self.last_save = datetime.utcnow()
         self.game_result: Optional[bool] = None  # True: servant-won, False: evil-won
         self.failed_voting_count = 0
         self.game_id = game_id
-        self.participants: list[T] = []
-        self.current_team: list[T] = []
+        self.participants: list[Participant] = participants or []
+        self.current_team: list[Participant] = []
         self.phase = GamePhase.Joining
         self.round_result: list[bool] = []  # True: servant-won, False: evil-won
-        self.king: Optional[T] = None
-        self.lady: Optional[T] = None
-        self.past_ladies: list[T] = []
+        self.king: Optional[Participant] = None
+        self.lady: Optional[Participant] = None
+        self.past_ladies: list[Participant] = []
 
-    def add_participant(self, participant: T):
+    def add_participant(self, participant: Participant):
         self.require_game_phase(GamePhase.Joining)
         try:
             self.get_participant_by_id(participant.identity)
@@ -147,7 +143,7 @@ class Game(Generic[T]):
         except InvalidParticipant:
             self.participants.append(participant)
 
-    def remove_participant(self, participant: T):
+    def remove_participant(self, participant: Participant):
         self.require_game_phase(GamePhase.Joining)
         try:
             self.get_participant_by_id(participant.identity)
@@ -172,7 +168,7 @@ class Game(Generic[T]):
         self.king, self.lady = sample(self.participants, 2)
         self.phase = GamePhase.Started
 
-    def get_user_info(self, pr: T):
+    def get_user_info(self, pr: Participant):
         msg = f'You role: {pr.role.value}'
         if pr.role == Role.Merlin:
             msg += ', Evil: {}'.format(', '.join(str(p) for p in self.participants if p.role in MERLIN_INFO))
@@ -188,7 +184,7 @@ class Game(Generic[T]):
         self.require_game_phase(GamePhase.Started)
         self.phase = GamePhase.TeamBuilding
 
-    def select_for_team(self, participant: T, identity: str):
+    def select_for_team(self, participant: Participant, identity: str):
         self.require_game_phase(GamePhase.TeamBuilding)
         if self.king != participant:
             raise OnlyKingCanDo
@@ -198,7 +194,7 @@ class Game(Generic[T]):
         else:
             self.current_team.append(p)
 
-    def confirm_team(self, participant: T):
+    def confirm_team(self, participant: Participant):
         self.require_game_phase(GamePhase.TeamBuilding)
         if self.king != participant:
             raise OnlyKingCanDo
@@ -209,7 +205,7 @@ class Game(Generic[T]):
             p.vote = None
         participant.vote = True
 
-    def vote(self, participant: T, vote: bool):
+    def vote(self, participant: Participant, vote: bool):
         self.require_game_phase(GamePhase.TeamVote)
         participant.vote = None if (participant.vote is vote) else vote
 
@@ -247,7 +243,7 @@ class Game(Generic[T]):
         for p in self.participants:
             p.quest_action = None
 
-    def quest_action(self, participant: T, success: bool):
+    def quest_action(self, participant: Participant, success: bool):
         self.require_game_phase(GamePhase.Quest)
         if participant not in self.current_team:
             raise InvalidActionException('You are not a member of this quest')
@@ -279,7 +275,7 @@ class Game(Generic[T]):
     def next_lady_candidates(self):
         return [p for p in self.participants if p != self.lady and p not in self.past_ladies]
 
-    def set_next_lady(self, participant: T, next_identity: str, dry_run=False) -> T:
+    def set_next_lady(self, participant: Participant, next_identity: str, dry_run=False) -> Participant:
         self.require_game_phase(GamePhase.Lady)
         if participant != self.lady:
             raise OnlyLadyCanDo
@@ -292,7 +288,7 @@ class Game(Generic[T]):
             self.move_to_next_team_building()
         return next_lady
 
-    def guess_merlin(self, participant: T, identity: str, dry_run=False) -> T:
+    def guess_merlin(self, participant: Participant, identity: str, dry_run=False) -> Participant:
         self.require_game_phase(GamePhase.GuessMerlin)
         if participant != self.get_assassin():
             raise OnlyAssassinCanDo
@@ -303,7 +299,7 @@ class Game(Generic[T]):
             self.finish(p.role is not Role.Merlin)
         return p
 
-    def get_assassin(self) -> T:
+    def get_assassin(self):
         for p in self.participants:
             if p.role is Role.Assassin:
                 return p
