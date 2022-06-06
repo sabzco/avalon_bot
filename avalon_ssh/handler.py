@@ -24,13 +24,20 @@ class SshGameHandler:
         self.cursor = f'{self.new_actor.username}> '
 
     async def process_command(self, command):
-        if command == '/help':
+        if command in ('help', '?', '/help'):
             msg = '/my-info    Show your info (while playing).\n'
             msg += '/restart    Restart game (probably with same persons).\n'
             msg += '/game-info  Print the game info\n'
             msg += '/delete     Stop and remove the current game.\n'
+            msg += 'exit or ^C  Exit.\n'
             self.stdout.write(msg)
             return
+
+        if command in ('exit', 'quit'):
+            self.cancel_input()
+            self.process.exit(0)
+            return
+
         listener = await EventListener.load_by_id(self.user_identity)
         if not listener:
             self.stdout.write('No game found\n')
@@ -56,7 +63,7 @@ class SshGameHandler:
             self.stdout.write(data + '\n')
             if to_lower:
                 data = data.lower()
-            if data.startswith('/'):
+            if data.startswith('/') or data in ('?', 'help', 'exit', 'quit'):
                 await self.process_command(data)
                 self.stdout.write(self.cursor)
                 continue
@@ -69,6 +76,10 @@ class SshGameHandler:
             else:
                 self.stdout.write(self.cursor)
 
+    def cancel_input(self):
+        if self.current_input:
+            self.current_input.cancel()
+
     async def listen_for_changes(self):
         listener = self.listener
         try:
@@ -77,7 +88,7 @@ class SshGameHandler:
                     event: GameEvent = await listener.queue.get()
                     await listener.reload_game()
                     if isinstance(event, GameDeleted):
-                        self.current_input.cancel()
+                        self.cancel_input()
                         break
                     if isinstance(event, VotingCompleted):
                         msg = listener.get_voting_result_message(event.result)
@@ -88,11 +99,11 @@ class SshGameHandler:
                     elif isinstance(event, GamePhaseChanged):
                         msg = self.game_info()
                     else:
-                        self.current_input.cancel()
+                        self.cancel_input()
                         # VotesChanged, GameParticipantsChanged, QuestTeamChanged, QuestActionsChanged, GamePhaseChanged
                         msg = listener.get_current_phase_message()
                     if msg != self.last_printed_step:
-                        self.current_input.cancel()
+                        self.cancel_input()
                         self.stdout.write('\n' + msg)
                         self.last_printed_step = msg
         finally:
@@ -109,8 +120,8 @@ class SshGameHandler:
         while True:
             listener = await EventListener.load_by_id(self.user_identity)
             if not listener:
-                self.stdout.write('Please choose an option:\n  1) Create a new game\n  2) Join an existing game\n'
-                                  + self.cursor)
+                self.stdout.write('Please choose an option (enter 1 or 2):\n  '
+                                  '1) Create a new game\n  2) Join an existing game\n' + self.cursor)
                 response = await self.read_input('1', '2')
                 if response == '1':  # new game
                     game = Game(participants=[self.new_actor])
