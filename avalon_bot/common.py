@@ -1,5 +1,6 @@
 COMMAND_NEW = 'new'
-COMMAND_FINISH = 'finish'
+COMMAND_RESTART = 'restart'
+COMMAND_FINISH = 'delete'
 MSG_START = 'start'
 MSG_JOIN = 'join'
 MSG_LEAVE = 'leave'

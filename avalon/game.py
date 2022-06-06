@@ -1,6 +1,11 @@
+import asyncio
 import enum
 import pickle
+import random
 import re
+import weakref
+from collections import defaultdict
+from contextlib import asynccontextmanager
 from datetime import datetime
 from random import sample
 from typing import Optional
@@ -117,12 +122,16 @@ GAME_PLANS = {
                  'Servant,Servant,Servant,Servant,Percival,Merlin,Assassin,Morgana,Minion,Oberon'),
 }
 if config.GAME_DEBUG:
-    GAME_PLANS[2]: GamePlan('1/1 1/1 1/1 1/1 1/1', 'Merlin,Assassin')
+    GAME_PLANS[2] = GamePlan('1/1 1/1 1/1 1/1 1/1', 'Merlin,Assassin')
+    GAME_PLANS[3] = GamePlan('1/1 1/1 1/1 1/1 1/1', 'Servant,Merlin,Assassin')
 
 
 class Game:
-    def __init__(self, game_id: str, participants: Optional[list[Participant]] = None):
+    def __init__(self, game_id='', participants: Optional[list[Participant]] = None,
+                 _last_phase=GamePhase.Joining):
         verify_identity(game_id)
+        if not game_id:
+            game_id = '{}-{}'.format(random.randint(100, 999), random.randint(100, 999))
         self.created = self.last_save = datetime.utcnow()
         self.game_result: Optional[bool] = None  # True: servant-won, False: evil-won
         self.failed_voting_count = 0
@@ -130,6 +139,7 @@ class Game:
         self.participants: list[Participant] = participants or []
         self.current_team: list[Participant] = []
         self.phase = GamePhase.Joining
+        self._last_phase = _last_phase
         self.round_result: list[bool] = []  # True: servant-won, False: evil-won
         self.king: Optional[Participant] = None
         self.lady: Optional[Participant] = None
@@ -142,6 +152,7 @@ class Game:
             raise exceptions.AlreadyJoined
         except InvalidParticipant:
             self.participants.append(participant)
+            self.publish_event(GameParticipantsChanged())
 
     def remove_participant(self, participant: Participant):
         self.require_game_phase(GamePhase.Joining)
@@ -150,6 +161,7 @@ class Game:
         except InvalidParticipant:
             raise exceptions.NotJoined from None
         self.participants = [p for p in self.participants if p.identity != participant.identity]
+        self.publish_event(GameParticipantsChanged())
 
     @property
     def plan(self) -> GamePlan:
@@ -193,6 +205,7 @@ class Game:
             self.current_team.remove(p)
         else:
             self.current_team.append(p)
+        self.publish_event(QuestTeamChanged())
 
     def confirm_team(self, participant: Participant):
         self.require_game_phase(GamePhase.TeamBuilding)
@@ -207,7 +220,10 @@ class Game:
 
     def vote(self, participant: Participant, vote: bool):
         self.require_game_phase(GamePhase.TeamVote)
+        old_is_none = participant.vote is None
         participant.vote = None if (participant.vote is vote) else vote
+        visible = old_is_none != (participant.vote is None)
+        self.publish_event(VotesChanged(visible))
 
     def process_vote_results(self) -> Optional[bool]:
         """
@@ -219,6 +235,7 @@ class Game:
         if not all(p.vote is not None for p in self.participants):  # all-voted
             return
         is_voting_succeeded = sum(p.vote for p in self.participants) > (len(self.participants) / 2)
+        self.publish_event(VotingCompleted(is_voting_succeeded))
         if is_voting_succeeded:
             self.start_quest()
             self.failed_voting_count = 0
@@ -227,7 +244,11 @@ class Game:
         if self.failed_voting_count >= len(self.participants):
             self.round_result.append(False)
             self.failed_voting_count = 0
-            self.move_to_next_team_building()
+            self.publish_event(QuestFailedByTooManyRejections())
+            if sum(not res for res in self.round_result) == 3:  # evil won
+                self.finish(False)
+            else:
+                self.move_to_next_team_building()
         else:
             self.move_to_next_team_building()
         return False
@@ -248,6 +269,7 @@ class Game:
         if participant not in self.current_team:
             raise InvalidActionException('You are not a member of this quest')
         participant.quest_action = None if (participant.quest_action is success) else success
+        self.publish_event(QuestActionsChanged())
 
     def process_quest_result(self) -> Optional[tuple[bool, int]]:
         """
@@ -262,6 +284,7 @@ class Game:
         failed_votes = sum(not p.quest_action for p in self.current_team)
         is_quest_succeeded = failed_votes < self.step[0]
         self.round_result.append(is_quest_succeeded)
+        self.publish_event(QuestCompleted(is_quest_succeeded, failed_votes, len(self.current_team) - failed_votes))
         if sum(not res for res in self.round_result) == 3:  # evil won
             self.finish(False)
         elif sum(res for res in self.round_result) == 3:  # servant won
@@ -274,6 +297,9 @@ class Game:
 
     def next_lady_candidates(self):
         return [p for p in self.participants if p != self.lady and p not in self.past_ladies]
+
+    def merlin_candidates(self):
+        return [p for p in self.participants if not p.role.is_evil]
 
     def set_next_lady(self, participant: Participant, next_identity: str, dry_run=False) -> Participant:
         self.require_game_phase(GamePhase.Lady)
@@ -319,21 +345,155 @@ class Game:
     def lock(game_id):
         return redis_client.lock(config.REDIS_PREFIX_GAME_LOCK + game_id, timeout=120)
 
+    def restart(self):
+        self.__init__(self.game_id, participants=self.participants, _last_phase=self.phase)
+
+    def publish_event(self, event: 'GameEvent'):
+        if not hasattr(self, '_pending_events'):
+            # noinspection PyAttributeOutsideInit
+            self._pending_events = []
+        # Keep only one event of each type
+        for ev in self._pending_events:
+            if isinstance(ev, type(event)):
+                return
+        self._pending_events.append(event)
+
     async def save(self):
+        old_pickle = getattr(self, '_old_pickle', None)
+        if old_pickle:
+            # noinspection PyUnresolvedReferences
+            del self._old_pickle
+            if pickle.dumps(self) == old_pickle:
+                return
+
         self.last_save = datetime.utcnow()
-        await redis_client.set(REDIS_PREFIX_GAME + self.game_id, pickle.dumps(self))
+        if self._last_phase != self.phase:
+            self.publish_event(GamePhaseChanged())
+        self._last_phase = self.phase
+        pending_events = getattr(self, '_pending_events', ())
+        if isinstance(pending_events, list):
+            del self._pending_events
+        await redis_client.setex(config.REDIS_PREFIX_GAME + self.game_id, config.GAME_RETENTION, pickle.dumps(self))
+        for event in pending_events:
+            InMemoryPubSub.publish(self, event)
 
     @classmethod
     async def load_by_id(cls, game_id: str) -> 'Game':
         value = await redis_client.get(config.REDIS_PREFIX_GAME + game_id)
         if value:
-            return pickle.loads(value)
+            game = pickle.loads(value)
+            game._old_pickle = value
+            return game
 
     async def delete(self):
         await redis_client.delete(config.REDIS_PREFIX_GAME + self.game_id)
+        InMemoryPubSub.publish(self, GameDeleted())
 
     def get_participant_by_id(self, identity):
         for p in self.participants:
             if p.identity == identity:
                 return p
         raise InvalidParticipant
+
+
+class GameEvent:
+    pass
+
+
+class GamePhaseChanged(GameEvent):
+    pass
+
+
+class GameParticipantsChanged(GameEvent):
+    pass
+
+
+class QuestTeamChanged(GameEvent):
+    pass
+
+
+class VotesChanged(GameEvent):
+    def __init__(self, is_visible=False):
+        self.is_visible = is_visible
+
+
+class VotingCompleted(GameEvent):
+    def __init__(self, result: bool):
+        self.result = result
+
+
+class QuestActionsChanged(GameEvent):
+    pass
+
+
+class QuestFailedByTooManyRejections(GameEvent):
+    pass
+
+
+class QuestCompleted(GameEvent):
+    def __init__(self, result: bool, failed_votes: int, success_votes: int):
+        self.result = result
+        self.failed_votes = failed_votes
+        self.success_votes = success_votes
+
+
+class GameDeleted(GameEvent):
+    pass
+
+
+class EventListener:
+    def __init__(self, listener_id, game: Game):
+        self.game = game
+        self.game_id = game.game_id
+        self.id = listener_id
+        self.created = self.last_save = datetime.utcnow()
+        self.queue = asyncio.Queue()
+
+    async def save(self):
+        self.last_save = datetime.utcnow()
+        await redis_client.setex(config.REDIS_PREFIX_LISTENER + self.id, config.GAME_RETENTION, pickle.dumps(self))
+
+    async def reload_game(self):
+        self.game = await Game.load_by_id(self.game_id)
+        assert self.game
+        return self.game
+
+    @asynccontextmanager
+    async def listen(self):
+        InMemoryPubSub.listeners[self.game_id].add(self)
+        yield self
+        InMemoryPubSub.listeners[self.game_id].remove(self)
+
+    @staticmethod
+    def lock(identity):
+        return redis_client.lock(config.REDIS_PREFIX_LISTENER_LOCK + identity, timeout=120)
+
+    @classmethod
+    async def load_by_id(cls, listener_id: str) -> 'EventListener':
+        value = await redis_client.get(config.REDIS_PREFIX_LISTENER + listener_id)
+        if value:
+            listener = pickle.loads(value)
+            listener.game = await Game.load_by_id(listener.game_id)
+            if listener and listener.game:
+                return listener
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state["queue"]
+        del state["game"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.game = None
+        if not getattr(self, 'queue', None):
+            self.queue = asyncio.Queue()
+
+
+class InMemoryPubSub:
+    listeners: dict[str, set[EventListener]] = defaultdict(weakref.WeakSet)
+
+    @staticmethod
+    def publish(game, event: GameEvent):
+        for listener in InMemoryPubSub.listeners[game.game_id]:
+            listener.queue.put_nowait(event)
