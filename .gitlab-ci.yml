@@ -1,0 +1,28 @@
+variables:
+  DOCKER_IMAGE: ${CI_REGISTRY}/sabz-hobbies/avalon-bot
+  DOCKER_TAG: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
+  BUILD_ARG__PYTHON_VERSION: '3.9'
+  BUILD_ARG__DEBIAN_VERSION: bullseye
+  BUILD_ARG__DOCKER_REGISTRY: docker.sabz.dev
+
+
+build docker image:
+  stage: build
+  tags: [ docker ]
+  rules:
+    - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
+  variables:
+    GIT_DEPTH: 500
+  script:
+    - docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD}
+    - docker build . -t ${DOCKER_IMAGE}:${DOCKER_TAG} --build-arg COMMIT_SHA=${CI_COMMIT_SHA}
+    - docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+
+
+kubit deploy:
+  stage: deploy
+  image: ${BUILD_ARG__DOCKER_REGISTRY}/sabzco/sabz-cli
+  rules:
+    - if: '$CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - 'curl -X POST -F DOCKER_TAG=${DOCKER_TAG} -H "Authorization: Bearer ${KUBIT_WEBHOOK_TOKEN}" https://api.kubit.ir/api/core/packs/inp7nfdr/vars/'
