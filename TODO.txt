@@ -2,3 +2,4 @@
 * Add join by join-key to telegram Bot
 * Revise UX of ssh bot, (messages should be separated by a separator)
 * Test windows ssh client
+* Colorize each ssh stream separately
