@@ -36,13 +36,13 @@ class SshListener(EventListener):
         return isinstance(participant, SshParticipant) and self.actor_id == participant.identity
 
     def get_joining_message(self):
-        msg = 'Current Participants:\n'
+        msg = f'Current participants (join-key: {self.game_id}):\n'
         for i, p in enumerate(self.game.participants):
             msg += f'  {i + 1}. {p}\n'
         return msg
 
     def get_game_start_message(self):
-        msg = ["The game is started!\n"]
+        msg = [f"The game {self.game_id} is started!\n"]
         for i, p in enumerate(self.game.participants):
             emoji = KING_TEXT if self.game.king == p else (LADY_TEXT if self.game.lady == p else "")
             msg.append(f'‎{i + 1}. {p} {emoji}')

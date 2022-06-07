@@ -35,6 +35,7 @@ class SshGameHandler:
             msg += f'{c("/restart")}    Restart game (probably with same persons).\n'
             msg += f'{c("/game-info")}  Print the game info\n'
             msg += f'{c("/delete")}     Stop and remove the current game.\n'
+            msg += f'{c("/detach")}     Detach from game, keeping its state.\n'
             msg += f'{c("exit")} or ^C  Exit.\n'
             self.stdout.write(msg)
             return
@@ -49,11 +50,18 @@ class SshGameHandler:
             self.stdout.write('No game found\n')
             return
 
-        if command == '/delete':
+        if command == '/detach':
+            await listener.delete()
+            self.listen_task.cancel()
+            self.cancel_input()
+        elif command == '/delete':
             await listener.game.delete()
+            self.listen_task.cancel()
+            self.cancel_input()
         elif command == '/restart':
             listener.game.restart()
             await listener.game.save()
+            self.cancel_input()
         elif command == '/my-info':
             self.stdout.write(listener.game.get_user_info(self.actor) + '\n')
         elif command == '/game-info':
@@ -134,7 +142,7 @@ class SshGameHandler:
                     await game.save()
                     listener = SshListener(self.user_identity, game)
                 if response == '2':  # join a game
-                    self.stdout.write('Enter join key (e.g 123-456), or (B)ack\n' + self.cursor)
+                    self.stdout.write('Enter join key (e.g 123-456), or (B)Back\n' + self.cursor)
                     while True:
                         response = await self.read_input(regex=r'[\w-]+')
                         if response == 'b':
