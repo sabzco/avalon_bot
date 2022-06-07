@@ -14,6 +14,7 @@ from avalon_ssh.server import start_server
 loop = asyncio.get_event_loop()
 loop.run_until_complete(start_server())
 
-logging.getLogger('telegram').setLevel(logging.WARNING)
-logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('telegram').setLevel(logging.INFO)
+logging.getLogger('httpx').setLevel(logging.INFO)
+logging.getLogger('asyncssh').setLevel(logging.WARNING)
 main()

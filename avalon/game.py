@@ -1,5 +1,6 @@
 import asyncio
 import enum
+import logging
 import pickle
 import random
 import re
@@ -16,6 +17,7 @@ from avalon import config, exceptions
 from avalon.exceptions import InvalidActionException, OnlyKingCanDo, OnlyLadyCanDo, InvalidParticipant, \
     OnlyAssassinCanDo
 
+logger = logging.getLogger(__name__)
 redis_client = aioredis.from_url(config.REDIS_URL)
 SUCCESS_EMOJI = "🏆"
 FAIL_EMOJI = "🏴‍☠️"
@@ -455,6 +457,9 @@ class EventListener:
         self.last_save = datetime.utcnow()
         await redis_client.setex(config.REDIS_PREFIX_LISTENER + self.id, config.GAME_RETENTION, pickle.dumps(self))
 
+    async def delete(self):
+        await redis_client.delete(config.REDIS_PREFIX_LISTENER + self.id)
+
     async def reload_game(self):
         self.game = await Game.load_by_id(self.game_id)
         assert self.game
@@ -462,9 +467,14 @@ class EventListener:
 
     @asynccontextmanager
     async def listen(self):
+        logger.info(f'Started game {self.game_id} listener: {self.id} {id(self)}')
         InMemoryPubSub.listeners[self.game_id].add(self)
-        yield self
-        InMemoryPubSub.listeners[self.game_id].remove(self)
+        try:
+            yield self
+        finally:
+            logger.info(f'Stopped game {self.game_id} listener: {self.id} {id(self)}')
+            # Not really needed, since we are using weak-references
+            InMemoryPubSub.listeners[self.game_id].discard(self)
 
     @staticmethod
     def lock(identity):
@@ -497,5 +507,6 @@ class InMemoryPubSub:
 
     @staticmethod
     def publish(game, event: GameEvent):
+        logger.info(f'Publish game event: {game.game_id}: {event}')
         for listener in InMemoryPubSub.listeners[game.game_id]:
             listener.queue.put_nowait(event)

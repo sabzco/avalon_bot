@@ -60,7 +60,6 @@ class SshGameHandler:
             self.stdout.write(f"{prompt}\n{self.cursor}")
         while True:
             data = (await self.process.stdin.readuntil('\n')).strip()
-            self.stdout.write(data + '\n')
             if to_lower:
                 data = data.lower()
             if data.startswith('/') or data in ('?', 'help', 'exit', 'quit'):
