@@ -9,3 +9,4 @@ venv
 *.mo
 build/
 local_env.py
+.vscode

@@ -1,9 +1,7 @@
 variables:
   DOCKER_IMAGE: ${CI_REGISTRY}/sabz-hobbies/avalon-bot
-  DOCKER_TAG: ${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHORT_SHA}
-  BUILD_ARG__PYTHON_VERSION: '3.9'
-  BUILD_ARG__DEBIAN_VERSION: bullseye
-  BUILD_ARG__DOCKER_REGISTRY: docker.sabz.dev
+  PYTHON_VERSION: '3.9'
+  DEBIAN_VERSION: bullseye
 
 
 build docker image:
@@ -14,10 +12,9 @@ build docker image:
   variables:
     GIT_DEPTH: 500
   script:
-    - docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD}
-    - docker build . -t ${DOCKER_IMAGE}:${DOCKER_TAG} --build-arg COMMIT_SHA=${CI_COMMIT_SHA}
-    - docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-
+    - |
+        make docker REGISTRY=${CI_REGISTRY} DOCKER_USER=${CI_REGISTRY_USER} DOCKER_PASS=${CI_REGISTRY_PASSWORD} \
+        PYTHON_VERSION=${PYTHON_VERSION} DEBIAN_VERSION=${DEBIAN_VERSION}
 
 kubit deploy:
   stage: deploy
