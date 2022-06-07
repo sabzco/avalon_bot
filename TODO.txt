@@ -1,4 +1,5 @@
 * Game locking in SSH bot
+* Reconnect Telegram listeners on starup
 * Fix order of messages in telegram Bot (when multiple events are received)
 * Add join by join-key to telegram Bot
 * Revise UX of ssh bot, (messages should be separated by a separator)

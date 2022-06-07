@@ -17,6 +17,7 @@ BOT_PROXY = env.get('BOT_PROXY')
 GAME_DEBUG = as_boolean(env.get('GAME_DEBUG'))
 
 REDIS_PREFIX_GAME = 'game_'
+REDIS_PREFIX_GAME_HISTORY = 'history_game_'
 REDIS_PREFIX_LISTENER = 'listener_'
 GAME_RETENTION = 7 * 24 * 3600  # 7days
 REDIS_PREFIX_GAME_LOCK = 'lock_game_'

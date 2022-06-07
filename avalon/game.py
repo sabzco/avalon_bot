@@ -374,6 +374,8 @@ class Game:
         if isinstance(pending_events, list):
             del self._pending_events
         await redis_client.setex(config.REDIS_PREFIX_GAME + self.game_id, config.GAME_RETENTION, pickle.dumps(self))
+        await redis_client.lpush(config.REDIS_PREFIX_GAME_HISTORY + self.game_id, pickle.dumps(self))
+        await redis_client.expire(config.REDIS_PREFIX_GAME_HISTORY + self.game_id, 24 * 3600)
         for event in pending_events:
             InMemoryPubSub.publish(self, event)
 
