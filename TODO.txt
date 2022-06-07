@@ -5,3 +5,4 @@
 * Revise UX of ssh bot, (messages should be separated by a separator)
 * Test windows ssh client
 * Colorize each ssh stream separately
+* Edit game plan (roles, quests) in game

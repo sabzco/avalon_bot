@@ -1,9 +1,10 @@
 import asyncio
 import re
+from functools import partial
 from typing import Optional
 
 from asyncssh import SSHServerProcess
-from colored import fg, attr
+import colored
 
 from avalon.exceptions import InvalidActionException
 from avalon.game import EventListener, Game, GamePhase, GameEvent, VotingCompleted, \
@@ -21,15 +22,20 @@ class SshGameHandler:
         self.current_input: Optional[asyncio.Task] = None
         self.listen_task: Optional[asyncio.Task] = None
         self.last_printed_step = ''
-        self.cursor = f'{self.new_actor.username}> '
+        self.cursor = self.colored(self.new_actor.username + "> ", fg='green', attr='bold')
+
+    def colored(self, value, fg='', attr=''):
+        return (fg and colored.fg(fg)) + (attr and colored.attr(attr)) + value + colored.attr(0)
 
     async def process_command(self, command):
         if command in ('help', '?', '/help'):
-            msg = '/my-info    Show your info (while playing).\n'
-            msg += '/restart    Restart game (probably with same persons).\n'
-            msg += '/game-info  Print the game info\n'
-            msg += '/delete     Stop and remove the current game.\n'
-            msg += 'exit or ^C  Exit.\n'
+            c = partial(self.colored, attr='bold')
+            msg = ''
+            msg += f'{c("/my-info")}    Show your info (while playing).\n'
+            msg += f'{c("/restart")}    Restart game (probably with same persons).\n'
+            msg += f'{c("/game-info")}  Print the game info\n'
+            msg += f'{c("/delete")}     Stop and remove the current game.\n'
+            msg += f'{c("exit")} or ^C  Exit.\n'
             self.stdout.write(msg)
             return
 
@@ -56,24 +62,25 @@ class SshGameHandler:
             self.stdout.write('Invalid command\n')
 
     async def read_input(self, *values, regex=None, to_lower=True, prompt=None, msg='Invalid input'):
+        cursor = self.cursor
         if prompt is not None:
-            self.stdout.write(f"{prompt}\n{self.cursor}")
+            self.stdout.write(f"{prompt}\n{cursor}")
         while True:
             data = (await self.process.stdin.readuntil('\n')).strip()
             if to_lower:
                 data = data.lower()
             if data.startswith('/') or data in ('?', 'help', 'exit', 'quit'):
                 await self.process_command(data)
-                self.stdout.write(self.cursor)
+                self.stdout.write(cursor)
                 continue
             if regex and re.match(regex + r'\Z', data):
                 return data
             if values and data in values:
                 return data
             if data:
-                self.stdout.write(f"{fg('red')}{msg}{attr(0)}\n{self.cursor}")
+                self.stdout.write(f"{self.colored(msg, fg='red')}\n{cursor}")
             else:
-                self.stdout.write(self.cursor)
+                self.stdout.write(cursor)
 
     def cancel_input(self):
         if self.current_input:
@@ -145,7 +152,7 @@ class SshGameHandler:
                 try:
                     await self.handle_game()
                 except InvalidActionException as e:
-                    self.stdout.write(f"{fg('red')}{e}{attr(0)}\n")
+                    self.stdout.write(f"{self.colored(str(e), fg='red')}\n")
                 except asyncio.CancelledError:
                     pass
 
@@ -191,7 +198,8 @@ class SshGameHandler:
         async with Game.lock(game.game_id):
             game = await listener.reload_game()
             if game.last_save != last_save:
-                self.stdout.write(f"{fg('red')}Game has been changed out of this context, Please Retry.{attr(0)}\n")
+                self.stdout.write(
+                    f"{self.colored('Game has been changed out of this context, Please Retry', fg='red')}\n")
                 return
 
             if game.phase == GamePhase.Joining:
