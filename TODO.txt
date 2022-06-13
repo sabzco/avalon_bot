@@ -1,3 +1,7 @@
+* Login to SSH with password
+* Listeners are not notified when a game is deleted
+* Print level info on game-info
+* Border for SSH Messages
 * Game locking in SSH bot
 * Reconnect Telegram listeners on starup
 * Fix order of messages in telegram Bot (when multiple events are received)

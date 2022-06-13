@@ -20,9 +20,9 @@ from avalon.exceptions import InvalidActionException, OnlyKingCanDo, OnlyLadyCan
 logger = logging.getLogger(__name__)
 redis_client = aioredis.from_url(config.REDIS_URL)
 SUCCESS_EMOJI = "🏆"
-FAIL_EMOJI = "🏴‍☠️"
+FAIL_EMOJI = "☠"
 KING_EMOJI = "👑"
-LADY_EMOJI = "👱‍♀️"
+LADY_EMOJI = "👧️"
 
 
 def verify_identity(identity):
@@ -86,20 +86,24 @@ class Role(enum.Enum):
     def emoji(self):
         return ROLE_EMOJI[self]
 
+    @property
+    def emoji_1char(self):
+        return ROLE_EMOJI[self].replace('♀', '')
+
 
 SERVANT_ROLES = [Role.Merlin, Role.Servant, Role.Percival]
 MERLIN_INFO = [Role.Minion, Role.Morgana, Role.Assassin]
 PERCIVAL_INFO = [Role.Merlin, Role.Morgana]
 EVIL_INFO = [Role.Minion, Role.Morgana, Role.Assassin, Role.Mordred]
 ROLE_EMOJI = {
-    Role.Merlin: '🎅🏻',
+    Role.Merlin: '🎅',
     Role.Percival: '🏇',
     Role.Servant: '🤵',
     Role.Mordred: '🎩',
-    Role.Assassin: '☠️',
+    Role.Assassin: '🥷️',
     Role.Morgana: '🦹‍♀️',
-    Role.Minion: '💀',
-    Role.Oberon: '👹',
+    Role.Minion: '⚔️',
+    Role.Oberon: '🕵',
 }
 
 

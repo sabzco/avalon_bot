@@ -48,7 +48,7 @@ class SshListener(EventListener):
             msg.append(f'‎{i + 1}. {p} {emoji}')
         msg.append("\nRoles (not necessarily in the order of the participants):")
         for r in self.game.plan.roles:
-            msg.append(f'{"-" if r.is_evil else "+"} {r.emoji} {r.value}')
+            msg.append(f'{"-" if r.is_evil else "+"} {r.emoji_1char} {r.value}')
         msg.append("\nQuests: " + '  '.join('{}/{}'.format(*step) for step in self.game.plan.steps))
         if self.game.round_result:
             msg.append('Round Results: ' + ' '.join(
@@ -117,7 +117,7 @@ class SshListener(EventListener):
         msg = ""
         for p in self.game.participants:
             if p.role.is_evil:
-                msg += f' - {p.role.value} {p.role.emoji} {p}\n'
+                msg += f' - {p.role.value} {p.role.emoji_1char} {p}\n'
 
         if self.is_me(self.game.get_assassin()):
             msg += f'\n{(self.game.get_assassin())}!\n'
@@ -134,6 +134,6 @@ class SshListener(EventListener):
         msg += (SUCCESS_EMOJI if self.game.game_result else FAIL_EMOJI) * 3
         msg += '\n\n'
         for p in self.game.participants:
-            msg += f'{"▪️" if p.role.is_evil else "▫️"} {p.role.value} {p.role.emoji} {str(p)}\n'
+            msg += f'{"▪️" if p.role.is_evil else "▫️"} {p.role.value} {p.role.emoji_1char} {str(p)}\n'
         msg += 'Start a new game with /new or /restart\n'
         return msg

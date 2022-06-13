@@ -203,7 +203,10 @@ class TgListener(EventListener):
         )
 
     def get_quest_result_message(self, succeeded: bool, failed_count: int, success_count: int):
-        msg = f'<b>The quest is {"SUCCEEDED! ✅" if succeeded else "FAILED! ❌"}</b>\n'
+        msg = ''
+        for p in self.game.current_team:
+            msg += f'‎{"❔" if p.quest_action is None else "🔱"} {mention(p)}\n'
+        msg += f'<b>The quest is {"SUCCEEDED! ✅" if succeeded else "FAILED! ❌"}</b>\n'
         msg += SUCCESS_EMOJI * success_count
         msg += FAIL_EMOJI * failed_count
         return dict(text=msg, parse_mode=ParseMode.HTML)
