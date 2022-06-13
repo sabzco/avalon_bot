@@ -110,10 +110,7 @@ class SshGameHandler:
                         msg = f'QUEST FAILED {FAIL_EMOJI} Too many rejections'
                     elif isinstance(event, QuestCompleted):
                         msg = listener.get_quest_result_message(event.result, event.failed_votes, event.success_votes)
-                    elif isinstance(event, GamePhaseChanged):
-                        msg = self.game_info()
                     else:
-                        self.cancel_input()
                         # VotesChanged, GameParticipantsChanged, QuestTeamChanged, QuestActionsChanged, GamePhaseChanged
                         msg = listener.get_current_phase_message()
                     if msg != self.last_printed_step:
