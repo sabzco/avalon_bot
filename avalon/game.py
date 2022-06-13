@@ -222,10 +222,8 @@ class Game:
 
     def vote(self, participant: Participant, vote: bool):
         self.require_game_phase(GamePhase.TeamVote)
-        old_is_none = participant.vote is None
-        participant.vote = None if (participant.vote is vote) else vote
-        visible = old_is_none != (participant.vote is None)
-        self.publish_event(VotesChanged(visible))
+        participant.vote = vote
+        self.publish_event(VotesChanged())
 
     def process_vote_results(self) -> Optional[bool]:
         """
@@ -270,7 +268,7 @@ class Game:
         self.require_game_phase(GamePhase.Quest)
         if participant not in self.current_team:
             raise InvalidActionException('You are not a member of this quest')
-        participant.quest_action = None if (participant.quest_action is success) else success
+        participant.quest_action = success
         self.publish_event(QuestActionsChanged())
 
     def process_quest_result(self) -> Optional[tuple[bool, int]]:
@@ -417,8 +415,8 @@ class QuestTeamChanged(GameEvent):
 
 
 class VotesChanged(GameEvent):
-    def __init__(self, is_visible=False):
-        self.is_visible = is_visible
+    def __init__(self):
+        pass
 
 
 class VotingCompleted(GameEvent):
