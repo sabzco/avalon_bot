@@ -195,7 +195,7 @@ async def play(game: Game, *_args):
 
 
 @game_query_callback(check_for_active_message=False)
-async def my_info(_tg_listener: TgListener, game: Game, actor, *_):
+async def my_info(game: Game, actor: TgParticipant, *_):
     return dict(text=game.get_user_info(actor), show_alert=True)
 
 
