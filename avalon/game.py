@@ -193,9 +193,9 @@ class Game:
         if pr.role == Role.Percival:
             msg += ', Morgana/Merlin: {}'.format(
                 ', '.join(str(p) for p in self.participants if p.role in PERCIVAL_INFO))
-        if pr.role.is_evil:
+        if pr.role.is_evil and pr.role != Role.Oberon:
             msg += ', Teammates: {}'.format(
-                ', '.join(str(p) for p in self.participants if p.role in EVIL_INFO and pr != p))
+                ', '.join('{}:{}'.format(p.role, p) for p in self.participants if p.role in EVIL_INFO and pr != p))
         return msg
 
     def proceed_to_game(self):
