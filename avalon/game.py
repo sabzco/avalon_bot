@@ -177,6 +177,10 @@ class Game:
     def step(self) -> tuple[int, int]:
         return self.plan.steps[len(self.round_result)]
 
+    @property
+    def max_reject_rounds(self) -> int:
+        return 5
+
     def play(self):
         self.require_game_phase(GamePhase.Joining)
         if len(self.participants) not in GAME_PLANS:
@@ -195,7 +199,7 @@ class Game:
                 ', '.join(str(p) for p in self.participants if p.role in PERCIVAL_INFO))
         if pr.role.is_evil and pr.role != Role.Oberon:
             msg += ', Teammates: {}'.format(
-                ', '.join('{}:{}'.format(p.role, p) for p in self.participants if p.role in EVIL_INFO and pr != p))
+                '\n'.join('{}:{}'.format(p.role.value, p) for p in self.participants if p.role in EVIL_INFO and pr != p))
         return msg
 
     def proceed_to_game(self):
@@ -245,7 +249,7 @@ class Game:
             self.failed_voting_count = 0
             return True
         self.failed_voting_count = getattr(self, 'failed_voting_count', 0) + 1
-        if self.failed_voting_count >= len(self.participants):
+        if self.failed_voting_count >= self.max_reject_rounds:
             self.round_result.append(False)
             self.failed_voting_count = 0
             self.publish_event(QuestFailedByTooManyRejections())

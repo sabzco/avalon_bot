@@ -132,7 +132,7 @@ class TgListener(EventListener):
     def get_game_start_message(self):
         msg = ["<i><b>The game is started!</b></i>\n"]
         for i, p in enumerate(self.game.participants):
-            emoji = KING_EMOJI if self.game.king == p else (LADY_EMOJI if self.game.lady == p else "")
+            emoji = (KING_EMOJI if self.game.king == p else '') + (LADY_EMOJI if self.game.lady == p else '')
             msg.append(f'‎{i + 1}. {mention(p)} {emoji}')
         msg.append("\n<i>Roles (<b>not</b> necessarily in the order of the participants):</i>")
         for r in self.game.plan.roles:
@@ -142,7 +142,7 @@ class TgListener(EventListener):
         msg.append(' '.join(INT_EMOJI[step[0]] for step in self.game.plan.steps))
         msg.append(' '.join((SUCCESS_EMOJI if step else FAIL_EMOJI) for step in self.game.round_result))
         if self.game.failed_voting_count:
-            msg.append(f'\nFailed Voting Count: {self.game.failed_voting_count} of {len(self.game.participants)}')
+            msg.append(f'\nFailed Voting Count: {self.game.failed_voting_count} of {self.game.max_reject_rounds}')
         return dict(
             text='\n'.join(msg),
             parse_mode=ParseMode.HTML,
@@ -166,9 +166,9 @@ class TgListener(EventListener):
         )
 
     def get_voting_phase_message(self):
-        msg = "<b><i>Vote for the this team:</i>\n"
+        msg = "<b><i>Vote for this team:</i>\n"
         if self.game.failed_voting_count:
-            msg += f'{self.game.failed_voting_count} rejection in this round (out of {len(self.game.participants)})\n'
+            msg += f'{self.game.failed_voting_count} rejection in this round (out of {self.game.max_reject_rounds})\n'
         for p in self.game.current_team:
             msg += f'\n‎🏅 {mention(p)}'
         msg += "\n</b>"

@@ -1,15 +1,23 @@
 import asyncio
 import re
+import unicodedata
 from functools import partial
 from typing import Optional
 
-from asyncssh import SSHServerProcess
 import colored
+from asyncssh import SSHServerProcess
 
 from avalon.exceptions import InvalidActionException
 from avalon.game import EventListener, Game, GamePhase, GameEvent, VotingCompleted, \
-    QuestFailedByTooManyRejections, FAIL_EMOJI, QuestCompleted, GamePhaseChanged, GameDeleted
+    QuestFailedByTooManyRejections, FAIL_EMOJI, QuestCompleted, GameDeleted
 from avalon_ssh.ssh_game import SshParticipant, SshListener
+
+NON_VISIBLE_CHARS = re.compile(r'[\u200c\u200e\ufe0f]')
+
+
+def visible_len(text):
+    # TODO: better implementation
+    return sum((2 if unicodedata.east_asian_width(ch) == 'W' else 1) for ch in re.sub(NON_VISIBLE_CHARS, '', text))
 
 
 class SshGameHandler:
@@ -26,6 +34,18 @@ class SshGameHandler:
 
     def colored(self, value, fg='', attr=''):
         return (fg and colored.fg(fg)) + (attr and colored.attr(attr)) + value + colored.attr(0)
+
+    def box(self, msg):
+        lines = msg.strip().split('\n')
+        width = min(120, self.process.term_size[0] - 4, max(visible_len(i) for i in lines))
+        out = ['┌─' + '─' * width + '─┐\n']
+        for line in lines:
+            for i in range(0, len(line) or 1, width):
+                part = line[i:i + width]
+                print(repr(part))
+                out.append('│ ' + part + ' ' * (width - visible_len(part)) + ' │\n')
+        out.append('└─' + '─' * width + '─┘\n')
+        return ''.join(out)
 
     async def process_command(self, command):
         if command in ('help', '?', '/help'):
@@ -65,7 +85,10 @@ class SshGameHandler:
         elif command == '/my-info':
             self.stdout.write(listener.game.get_user_info(self.actor) + '\n')
         elif command == '/game-info':
-            self.stdout.write(self.game_info())
+            if self.listener.game.phase not in (GamePhase.Joining, GamePhase.Started):
+                self.stdout.write(self.box(self.listener.get_game_start_message()))
+            self.last_printed_step = self.listener.get_current_phase_message()
+            self.stdout.write(self.box(self.last_printed_step))
         else:
             self.stdout.write('Invalid command\n')
 
@@ -115,15 +138,10 @@ class SshGameHandler:
                         msg = listener.get_current_phase_message()
                     if msg != self.last_printed_step:
                         self.cancel_input()
-                        self.stdout.write('\n' + msg)
+                        self.stdout.write('\n' + self.box(msg))
                         self.last_printed_step = msg
         finally:
             self.listener = None
-
-    def game_info(self):
-        return '---------------\nCurrent Game State:\n' + \
-               self.listener.get_game_start_message() + \
-               '---------------\n'
 
     async def handle_connection(self):
         self.stdout.write(f"Welcome to Avalon Bot, {self.new_actor}!\n\n")
@@ -170,7 +188,7 @@ class SshGameHandler:
         game = listener.game
         msg = listener.get_current_phase_message()
         if msg != self.last_printed_step:
-            self.stdout.write(msg)
+            self.stdout.write(self.box(msg))
             self.last_printed_step = msg
         inp = self.read_input(prompt='')  # wait forever
         if game.phase == GamePhase.Joining:
@@ -179,7 +197,7 @@ class SshGameHandler:
             inp = self.read_input('p', prompt='(P)Play')
         if game.phase == GamePhase.TeamBuilding:
             if self.actor == game.king:
-                prompt = f'Comma separated 1-{len(game.participants)} to toggle team, then (C)Confirm'
+                prompt = f'Comma separated numbers to toggle team, then (C)Confirm'
                 inp = self.read_input(prompt=prompt, regex='c|[0-9,]*')
         if game.phase == GamePhase.TeamVote:
             inp = self.read_input('a', 'r', prompt='(A)Approve (R)Reject')

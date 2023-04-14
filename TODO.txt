@@ -1,3 +1,6 @@
+* پیام‌های توی کنسول چاپ شوند
+توی رای دادن هم تاگل نداشته باشه.
+
 * Login to SSH with password
 * Listeners are not notified when a game is deleted
 * Print level info on game-info
@@ -10,3 +13,4 @@
 * Test windows ssh client
 * Colorize each ssh stream separately
 * Edit game plan (roles, quests) in game
+* Change participant time

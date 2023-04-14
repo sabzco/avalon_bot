@@ -44,7 +44,7 @@ class SshListener(EventListener):
     def get_game_start_message(self):
         msg = [f"The game {self.game_id} is started!\n"]
         for i, p in enumerate(self.game.participants):
-            emoji = KING_TEXT if self.game.king == p else (LADY_TEXT if self.game.lady == p else "")
+            emoji = (KING_TEXT + ' ' if self.game.king == p else '') + (LADY_TEXT if self.game.lady == p else '')
             msg.append(f'‎{i + 1}. {p} {emoji}')
         msg.append("\nRoles (not necessarily in the order of the participants):")
         for r in self.game.plan.roles:
@@ -54,7 +54,7 @@ class SshListener(EventListener):
             msg.append('Round Results: ' + ' '.join(
                 (SUCCESS_EMOJI + 'SUCCESS' if step else FAIL_EMOJI + 'FAIL') for step in self.game.round_result))
         if self.game.failed_voting_count:
-            msg.append(f'\nFailed Voting Count: {self.game.failed_voting_count} of {len(self.game.participants)}')
+            msg.append(f'\nFailed Voting Count: {self.game.failed_voting_count} of {self.game.max_reject_rounds}')
         return '\n'.join(msg) + '\n'
 
     def get_team_building_message(self):
@@ -71,9 +71,9 @@ class SshListener(EventListener):
         return msg
 
     def get_voting_phase_message(self):
-        msg = "Vote for the this team:\n"
+        msg = "Vote for this team:\n"
         if self.game.failed_voting_count:
-            msg += f'{self.game.failed_voting_count} rejection in this round (out of {len(self.game.participants)})\n'
+            msg += f'{self.game.failed_voting_count} rejection in this round (out of {self.game.max_reject_rounds})\n'
         for p in self.game.current_team:
             msg += f'\n‎🏅 {p}'
         msg += "\n"
