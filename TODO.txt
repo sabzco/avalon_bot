@@ -1,5 +1,4 @@
 * پیام‌های توی کنسول چاپ شوند
-توی رای دادن هم تاگل نداشته باشه.
 
 * Login to SSH with password
 * Listeners are not notified when a game is deleted
